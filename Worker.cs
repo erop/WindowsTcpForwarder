@@ -7,6 +7,7 @@ namespace WindowsTcpForwarder;
 
 public class Worker : BackgroundService
 {
+    private readonly List<NetworkStream> _destinations = new();
     private readonly ILogger<Worker> _logger;
     private TcpListener? _source;
 
@@ -34,9 +35,27 @@ public class Worker : BackgroundService
 
     private void InitializeDestinations(DestinationsSettings destinationsSettings)
     {
-        foreach (var destinationSetting in destinationsSettings)
+        _destinations.Clear();
+        foreach (var destinationSetting in destinationsSettings.Destinations)
+            try
+            {
+                var tcpClient = new TcpClient(destinationSetting.Host, destinationSetting.Port);
+                _destinations.Add(tcpClient.GetStream());
+            }
+            catch (Exception e) when (e is ArgumentNullException || e is ArgumentOutOfRangeException ||
+                                      e is SocketException)
+            {
+                _logger.LogError(e.Message);
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Unexpected error on TCP client initialization");
+            }
+
+        if (_destinations.Count == 0)
         {
-            
+            _logger.LogCritical("No TCP clients were initialized");
+            Environment.Exit(1);
         }
     }
 
