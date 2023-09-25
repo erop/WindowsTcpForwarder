@@ -54,11 +54,12 @@ public class Worker : BackgroundService
             catch (Exception e) when (e is ArgumentNullException || e is ArgumentOutOfRangeException ||
                                       e is SocketException)
             {
-                _logger.LogError(e.Message);
+                _logger.LogError("Initializing destination stream error: {Message}", e.Message);
             }
             catch (Exception e)
             {
-                _logger.LogError(e, "Unexpected error on TCP client initialization");
+                _logger.LogError("Unexpected error on TCP client initialization: IP {IP}, Port {Port} ",
+                    destinationSetting.Host, destinationSetting.Port);
             }
 
         if (_destinations.Count == 0)
@@ -76,16 +77,33 @@ public class Worker : BackgroundService
             while (!stoppingToken.IsCancellationRequested)
                 if (_source is not null)
                 {
+                    NetworkStream? sourceStream = null;
                     var client = await _source.AcceptTcpClientAsync(stoppingToken);
-                    var stream = client.GetStream();
+                    try
+                    {
+                        sourceStream = client.GetStream();
+                    }
+                    catch (Exception e) when (e is InvalidOperationException || e is ObjectDisposedException)
+                    {
+                        _logger.LogError(e, "Unable to acquire source network stream");
+                        ShutdownApplication(1);
+                    }
 
                     int i;
 
-                    while ((i = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) != 0)
+                    while ((i = await sourceStream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) != 0)
                     {
                         var message = Encoding.UTF8.GetString(buffer, 0, i);
                         _logger.LogInformation("Received: {Message}", message);
-                        foreach (var destination in _destinations) destination.Write(buffer);
+                        foreach (var destination in _destinations)
+                            try
+                            {
+                                destination.Write(buffer);
+                            }
+                            catch (Exception e)
+                            {
+                                _logger.LogError(e, "Unable to write to destination network stream");
+                            }
                     }
                 }
         }
@@ -94,7 +112,7 @@ public class Worker : BackgroundService
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "{Message}", e.Message);
+            _logger.LogError( "Application error: {Message}", e.Message);
             ShutdownApplication(1);
         }
     }

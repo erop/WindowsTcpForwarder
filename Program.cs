@@ -4,7 +4,8 @@ using WindowsTcpForwarder.Configuration;
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
-        services.AddOptions<SourceSettings>().Bind(context.Configuration.GetSection(SourceSettings.Section));
+        services.AddOptions<SourceSettings>()
+            .Bind(context.Configuration.GetSection(SourceSettings.Section));
         services.AddOptions<DestinationsSettings>()
             .Bind(context.Configuration.GetSection(DestinationsSettings.Section));
 
