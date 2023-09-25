@@ -24,13 +24,21 @@ public class Worker : BackgroundService
         try
         {
             _source = new TcpListener(IPAddress.Parse(sourceSettings.LocalIp), sourceSettings.Port);
+            _source.Start();
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Unable to instantiate TCP listener on interface {LocalIp} and port {Port}",
                 sourceSettings.LocalIp, sourceSettings.Port);
-            Environment.Exit(1);
+            ShutdownApplication(1);
         }
+    }
+
+    private void ShutdownApplication(int code)
+    {
+        _source?.Stop();
+        foreach (var stream in _destinations) stream.Dispose();
+        Environment.Exit(code);
     }
 
     private void InitializeDestinations(DestinationsSettings destinationsSettings)
@@ -55,7 +63,7 @@ public class Worker : BackgroundService
         if (_destinations.Count == 0)
         {
             _logger.LogCritical("No TCP clients were initialized");
-            Environment.Exit(1);
+            ShutdownApplication(1);
         }
     }
 
@@ -75,7 +83,7 @@ public class Worker : BackgroundService
         catch (Exception e)
         {
             _logger.LogError(e, "{Message}", e.Message);
-            Environment.Exit(1);
+            ShutdownApplication(1);
         }
     }
 }
