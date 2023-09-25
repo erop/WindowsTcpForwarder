@@ -1,29 +1,43 @@
+using System.Net;
+using System.Net.Sockets;
+using Microsoft.Extensions.Options;
+using WindowsTcpForwarder.Configuration;
+
 namespace WindowsTcpForwarder;
 
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
+    private TcpListener? _source;
 
-    public Worker(ILogger<Worker> logger)
+    public Worker(ILogger<Worker> logger, IOptions<SourceSettings> sourceSettings,
+        IOptions<DestinationsSettings> destinationsSettings)
     {
         _logger = logger;
-        Initialize();
+        InitializeSource(sourceSettings.Value);
+        InitializeDestinations(destinationsSettings.Value);
     }
 
-    private void Initialize()
+    private void InitializeSource(SourceSettings sourceSettings)
     {
-        InitializeSource();
-        InitializeDestinations();
+        try
+        {
+            _source = new TcpListener(IPAddress.Parse(sourceSettings.LocalIp), sourceSettings.Port);
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Unable to instantiate TCP listener on interface {LocalIp} and port {Port}",
+                sourceSettings.LocalIp, sourceSettings.Port);
+            Environment.Exit(1);
+        }
     }
 
-    private void InitializeDestinations()
+    private void InitializeDestinations(DestinationsSettings destinationsSettings)
     {
-        // throw new NotImplementedException();
-    }
-
-    private void InitializeSource()
-    {
-        // throw new NotImplementedException();
+        foreach (var destinationSetting in destinationsSettings)
+        {
+            
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
