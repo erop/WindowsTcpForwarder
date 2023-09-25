@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using Microsoft.Extensions.Options;
 using WindowsTcpForwarder.Configuration;
 
@@ -71,11 +72,22 @@ public class Worker : BackgroundService
     {
         try
         {
+            var buffer = new byte[256];
             while (!stoppingToken.IsCancellationRequested)
-            {
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-                await Task.Delay(1000, stoppingToken);
-            }
+                if (_source is not null)
+                {
+                    var client = await _source.AcceptTcpClientAsync(stoppingToken);
+                    var stream = client.GetStream();
+
+                    int i;
+
+                    while ((i = await stream.ReadAsync(buffer, 0, buffer.Length, stoppingToken)) != 0)
+                    {
+                        var message = Encoding.UTF8.GetString(buffer, 0, i);
+                        _logger.LogInformation("Received: {Message}", message);
+                        foreach (var destination in _destinations) destination.Write(buffer);
+                    }
+                }
         }
         catch (TaskCanceledException)
         {
