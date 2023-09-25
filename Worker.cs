@@ -107,13 +107,20 @@ public class Worker : BackgroundService
                     }
                 }
         }
-        catch (TaskCanceledException)
+        catch (TaskCanceledException e)
         {
+            _logger.LogInformation("{Message}", e.Message);
         }
         catch (Exception e)
         {
             _logger.LogError( "Application error: {Message}", e.Message);
             ShutdownApplication(1);
         }
+    }
+
+    public override Task StopAsync(CancellationToken cancellationToken)
+    {
+        ShutdownApplication(0);
+        return base.StopAsync(cancellationToken);
     }
 }
