@@ -2,7 +2,7 @@ using WindowsTcpForwarder;
 using WindowsTcpForwarder.Configuration;
 
 var host = Host.CreateDefaultBuilder(args)
-    .ConfigureServices((context, services) =>
+    .ConfigureServices(services =>
     {
         services.AddOptions<SourceSettings>()
             .BindConfiguration(SourceSettings.Section)
