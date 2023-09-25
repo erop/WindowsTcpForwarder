@@ -5,9 +5,13 @@ var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
         services.AddOptions<SourceSettings>()
-            .Bind(context.Configuration.GetSection(SourceSettings.Section));
+            .BindConfiguration(SourceSettings.Section)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services.AddOptions<DestinationsSettings>()
-            .Bind(context.Configuration.GetSection(DestinationsSettings.Section));
+            .BindConfiguration(DestinationsSettings.Section)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddWindowsService(options => { options.ServiceName = "TcpForwarder"; });
 
