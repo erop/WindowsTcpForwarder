@@ -47,6 +47,9 @@ public class Worker : BackgroundService
                         }
                     }
                 }
+                catch (TaskCanceledException e)
+                {
+                }
                 catch (Exception e)
                 {
                     _logger.LogError("Error processing message", e.Message);
