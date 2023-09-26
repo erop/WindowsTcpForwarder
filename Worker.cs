@@ -23,31 +23,50 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _listener = InitializeListener(_sourceSettings);
-        _destinations = InitializeDestination(_destinationsSettings);
+        InitializeSource(_sourceSettings);
+        InitializeDestinations(_destinationsSettings);
     }
 
-    private List<StreamWriter> InitializeDestination(DestinationsSettings settings)
+    private void InitializeDestinations(DestinationsSettings settings)
     {
+        _destinations.Clear();
         foreach (var hostPort in settings.Destinations)
+            try
+            {
+                var client = new TcpClient(hostPort.Host, hostPort.Port);
+                var stream = client.GetStream();
+                var writer = new StreamWriter(stream);
+                _destinations.Add(writer);
+            }
+            catch (Exception e)
+            {
+                _logger.LogWarning("Unable to initialize TcpClient for host:port {Host}:{Port}", hostPort.Host, hostPort.Port);
+            }
+
+        if (_destinations.Count == 0)
         {
-            new TcpClient(hostPort.Host, hostPort.Port);
+            _logger.LogError("No destination were initialized");
+            ShutdownFailedApplication();
         }
     }
 
-    private TcpListener InitializeListener(SourceSettings settings)
+    private void InitializeSource(SourceSettings settings)
     {
         try
         {
-            var listener = new TcpListener(IPAddress.Parse(settings.LocalIp), settings.Port);
-            listener.Start();
-            return listener;
+            _listener = new TcpListener(IPAddress.Parse(settings.LocalIp), settings.Port);
+            _listener.Start();
         }
         catch (Exception e)
         {
             _logger.LogError("Unable to initialize TCP listener: {Message}", e.Message);
-            ShutdownApplication(1);
+            ShutdownFailedApplication();
         }
+    }
+
+    private void ShutdownFailedApplication()
+    {
+        ShutdownApplication(1);
     }
 
     private void ShutdownApplication(int code)
