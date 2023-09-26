@@ -7,11 +7,11 @@ namespace WindowsTcpForwarder;
 
 public class Worker : BackgroundService
 {
+    private readonly List<StreamWriter> _destinations = new();
     private readonly DestinationsSettings _destinationsSettings;
     private readonly ILogger<Worker> _logger;
     private readonly SourceSettings _sourceSettings;
-    private List<StreamWriter> _destinations = new();
-    private TcpListener? _listener;
+    private TcpListener _source;
 
     public Worker(ILogger<Worker> logger, IOptions<SourceSettings> sourceSettings,
         IOptions<DestinationsSettings> destinationsSettings)
@@ -25,6 +25,24 @@ public class Worker : BackgroundService
     {
         InitializeSource(_sourceSettings);
         InitializeDestinations(_destinationsSettings);
+
+        while (!stoppingToken.IsCancellationRequested)
+            try
+            {
+                var client = await _source.AcceptTcpClientAsync(stoppingToken);
+                var stream = client.GetStream();
+                var reader = new StreamReader(stream);
+                var message = await reader.ReadLineAsync(stoppingToken);
+                _logger.LogInformation("Received: {Message}", message);
+                foreach (var writer in _destinations) await writer.WriteLineAsync(message);
+            }
+            catch (Exception e)
+            {
+                _logger.LogError("Unable initialize stream reader");
+                ShutdownFailedApplication();
+            }
+
+        ShutdownApplication(0);
     }
 
     private void InitializeDestinations(DestinationsSettings settings)
@@ -40,7 +58,8 @@ public class Worker : BackgroundService
             }
             catch (Exception e)
             {
-                _logger.LogWarning("Unable to initialize TcpClient for host:port {Host}:{Port}", hostPort.Host, hostPort.Port);
+                _logger.LogWarning("Unable to initialize TcpClient for host:port {Host}:{Port}", hostPort.Host,
+                    hostPort.Port);
             }
 
         if (_destinations.Count == 0)
@@ -54,8 +73,8 @@ public class Worker : BackgroundService
     {
         try
         {
-            _listener = new TcpListener(IPAddress.Parse(settings.LocalIp), settings.Port);
-            _listener.Start();
+            _source = new TcpListener(IPAddress.Parse(settings.LocalIp), settings.Port);
+            _source.Start();
         }
         catch (Exception e)
         {
@@ -71,8 +90,8 @@ public class Worker : BackgroundService
 
     private void ShutdownApplication(int code)
     {
-        _listener?.Stop();
         foreach (var destination in _destinations) destination.Close();
+        _source?.Stop();
         Environment.Exit(code);
     }
 }
