@@ -11,7 +11,7 @@ public class Worker : BackgroundService
     private readonly DestinationsSettings _destinationsSettings;
     private readonly ILogger<Worker> _logger;
     private readonly SourceSettings _sourceSettings;
-    private TcpListener _source;
+    private TcpListener? _source;
 
     public Worker(ILogger<Worker> logger, IOptions<SourceSettings> sourceSettings,
         IOptions<DestinationsSettings> destinationsSettings)
@@ -29,36 +29,37 @@ public class Worker : BackgroundService
         try
         {
             while (!stoppingToken.IsCancellationRequested)
-            {
-                var client = await _source.AcceptTcpClientAsync(stoppingToken);
-                var stream = client.GetStream();
-                var reader = new StreamReader(stream);
-
-                try
+                if (_source is not null)
                 {
-                    while (await reader.ReadLineAsync(stoppingToken) is { } message)
+                    var client = await _source.AcceptTcpClientAsync(stoppingToken);
+                    var stream = client.GetStream();
+                    var reader = new StreamReader(stream);
+
+                    try
                     {
-                        _logger.LogInformation("[{Time}] Message: {Message}", DateTimeOffset.Now.ToString("u"),
-                            message);
-                        foreach (var writer in _destinations)
+                        while (await reader.ReadLineAsync(stoppingToken) is { } message)
                         {
-                            await writer.WriteLineAsync(message);
-                            await writer.FlushAsync();
+                            _logger.LogInformation("[{Time}] Message: {Message}", DateTimeOffset.Now.ToString("u"),
+                                message);
+                            foreach (var writer in _destinations)
+                            {
+                                await writer.WriteLineAsync(message);
+                                await writer.FlushAsync();
+                            }
                         }
                     }
+                    catch (TaskCanceledException)
+                    {
+                    }
+                    catch (Exception e)
+                    {
+                        _logger.LogError("Error processing message", e.Message);
+                    }
                 }
-                catch (TaskCanceledException e)
-                {
-                }
-                catch (Exception e)
-                {
-                    _logger.LogError("Error processing message", e.Message);
-                }
-            }
         }
         catch (Exception e)
         {
-            _logger.LogError("Unable to initialize stream reader");
+            _logger.LogError("Unable to initialize stream reader: {Message}", e.Message);
             ShutdownFailedApplication();
         }
 
@@ -78,8 +79,9 @@ public class Worker : BackgroundService
             }
             catch (Exception e)
             {
-                _logger.LogWarning("Unable to initialize TcpClient for host:port {Host}:{Port}", hostPort.Host,
-                    hostPort.Port);
+                _logger.LogWarning("Unable to initialize TcpClient for host:port {Host}:{Port}; Message: {Message}",
+                    hostPort.Host,
+                    hostPort.Port, e.Message);
             }
 
         if (_destinations.Count == 0)
