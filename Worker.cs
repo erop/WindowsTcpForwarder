@@ -26,21 +26,38 @@ public class Worker : BackgroundService
         InitializeSource(_sourceSettings);
         InitializeDestinations(_destinationsSettings);
 
-        while (!stoppingToken.IsCancellationRequested)
-            try
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
             {
                 var client = await _source.AcceptTcpClientAsync(stoppingToken);
                 var stream = client.GetStream();
                 var reader = new StreamReader(stream);
-                var message = await reader.ReadLineAsync(stoppingToken);
-                _logger.LogInformation("Received: {Message}", message);
-                foreach (var writer in _destinations) await writer.WriteLineAsync(message);
+
+                try
+                {
+                    while (await reader.ReadLineAsync(stoppingToken) is { } message)
+                    {
+                        _logger.LogInformation("[{Time}] Message: {Message}", DateTimeOffset.Now.ToString("u"),
+                            message);
+                        foreach (var writer in _destinations)
+                        {
+                            await writer.WriteLineAsync(message);
+                            await writer.FlushAsync();
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError("Error processing message", e.Message);
+                }
             }
-            catch (Exception e)
-            {
-                _logger.LogError("Unable initialize stream reader");
-                ShutdownFailedApplication();
-            }
+        }
+        catch (Exception e)
+        {
+            _logger.LogError("Unable to initialize stream reader");
+            ShutdownFailedApplication();
+        }
 
         ShutdownApplication(0);
     }
