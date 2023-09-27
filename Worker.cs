@@ -42,10 +42,15 @@ public class Worker : BackgroundService
                             _logger.LogInformation("[{Time}] Message: {Message}", DateTimeOffset.Now.ToString("u"),
                                 message);
                             foreach (var writer in _destinations)
-                            {
-                                await writer.WriteLineAsync(message);
-                                await writer.FlushAsync();
-                            }
+                                try
+                                {
+                                    await writer.WriteLineAsync(message);
+                                    await writer.FlushAsync();
+                                }
+                                catch (Exception e)
+                                {
+                                    _logger.LogError("Unable to send message");
+                                }
                         }
                     }
                     catch (TaskCanceledException)
